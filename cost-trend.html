@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>空调 vs 珠宝 · 每日成本趋势</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1:   #fcfcfb;
+    --page-plane:  #f9f9f7;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --muted:          #898781;
+    --gridline:       #e1e0d9;
+    --baseline:       #c3c2b7;
+    --border:         rgba(11,11,11,0.10);
+    --ring:           #fcfcfb;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      color-scheme: dark;
+      --surface-1:   #1a1a19;
+      --page-plane:  #0d0d0d;
+      --text-primary:   #ffffff;
+      --text-secondary: #c3c2b7;
+      --muted:          #898781;
+      --gridline:       #2c2c2a;
+      --baseline:       #383835;
+      --border:         rgba(255,255,255,0.10);
+      --ring:           #1a1a19;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --surface-1:   #1a1a19;
+    --page-plane:  #0d0d0d;
+    --text-primary:   #ffffff;
+    --text-secondary: #c3c2b7;
+    --muted:          #898781;
+    --gridline:       #2c2c2a;
+    --baseline:       #383835;
+    --border:         rgba(255,255,255,0.10);
+    --ring:           #1a1a19;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--page-plane);
+    font-family: system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+    color: var(--text-primary);
+    padding: 32px 16px;
+    display: flex;
+    justify-content: center;
+  }
+  .viz-root { width: 760px; }
+
+  header { margin-bottom: 8px; }
+  h1 { font-size: 20px; font-weight: 650; margin: 0 0 4px; letter-spacing: .01em; }
+  .sub { color: var(--text-secondary); font-size: 13px; margin: 0 0 6px; }
+
+  .theme-toggle {
+    position: absolute; right: 16px; top: 16px;
+    background: var(--surface-1); color: var(--text-secondary);
+    border: 1px solid var(--baseline); border-radius: 999px;
+    padding: 4px 12px; font-size: 12px; cursor: pointer;
+  }
+
+  .chart-wrap {
+    position: relative;
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 14px 8px;
+  }
+  svg { display: block; width: 732px; }
+  .panel-label { font-size: 12px; color: var(--muted); padding-left: 46px; margin-bottom: 0; }
+
+  .legend {
+    display: flex; flex-wrap: wrap; gap: 6px 18px;
+    padding: 10px 2px 4px;
+    font-size: 12.5px; color: var(--text-secondary);
+  }
+  .legend .swatch { display: inline-flex; align-items: center; gap: 7px; }
+  .legend .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+  .legend .lbl { font-weight: 500; }
+  .legend .tone { color: var(--muted); }
+
+  .note { color: var(--muted); font-size: 12px; margin: 8px 0 18px; line-height: 1.5; }
+
+  table {
+    width: 100%; border-collapse: collapse; font-size: 12.5px;
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; overflow: hidden;
+  }
+  table th, table td {
+    padding: 6px 10px; text-align: right; font-variant-numeric: tabular-nums;
+    border-bottom: 1px solid var(--border);
+  }
+  table th:first-child, table td:first-child { text-align: left; }
+  table th { font-weight: 600; color: var(--text-secondary); background: var(--page-plane); font-size: 11.5px; }
+  table tr:last-child td { border-bottom: none; }
+  table .miss { color: var(--muted); }
+  table caption { caption-side: top; text-align: left; font-size: 13px; font-weight: 600; padding: 0 0 6px; }
+
+  .crosshair {
+    position: absolute; top: 0; bottom: 0; width: 1px;
+    background: var(--baseline); pointer-events: none; display: none;
+  }
+  .tooltip {
+    position: absolute; pointer-events: none; display: none;
+    background: var(--surface-1); border: 1px solid var(--baseline); border-radius: 8px;
+    padding: 8px 10px; font-size: 12px; line-height: 1.55;
+    box-shadow: 0 2px 10px rgba(0,0,0,.12); min-width: 168px;
+  }
+  .tooltip .t-day { font-weight: 650; margin-bottom: 3px; }
+  .tooltip .t-row { display: flex; justify-content: space-between; gap: 14px; }
+  .tooltip .t-row .k { color: var(--text-secondary); }
+  .tooltip .t-row .v { font-variant-numeric: tabular-nums; font-weight: 550; }
+  .tooltip .t-row .v.miss { color: var(--muted); font-weight: 400; }
+</style>
+</head>
+<body>
+<button class="theme-toggle" id="toggle" type="button">切换深色</button>
+<div class="viz-root">
+  <header>
+    <h1>空调 vs 珠宝 · 每日成本趋势</h1>
+    <p class="sub">按天对比“成本”与“实际成本”的下降趋势，单位：元。纵轴为对数刻度（0.005–10），拉开小数值间距以便看清后期趋势，两面板量级可直接对比。</p>
+  </header>
+
+  <div class="chart-wrap" id="wrap">
+    <div class="panel-label">成本</div>
+    <svg id="panel0" width="732" height="196" role="img" aria-label="成本面板"></svg>
+    <div class="panel-label" style="margin-top:6px;">实际成本</div>
+    <svg id="panel1" width="732" height="196" role="img" aria-label="实际成本面板"></svg>
+    <div class="crosshair" id="crosshair"></div>
+    <div class="tooltip" id="tooltip"></div>
+  </div>
+
+  <div class="legend" id="legend"></div>
+
+  <p class="note">
+    注：珠宝成本在第 3 → 4 天出现断崖式下降（5.17 → 0.0284）；珠宝实际成本第 6 天数据缺失（无），图上该位置为断点。
+  </p>
+
+  <table>
+    <caption>数据明细</caption>
+    <thead>
+      <tr><th>天数</th><th>空调成本</th><th>珠宝成本</th><th>空调实际成本</th><th>珠宝实际成本</th></tr>
+    </thead>
+    <tbody id="tbody"></tbody>
+  </table>
+</div>
+
+<script>
+const DAYS = ['第1天','第2天','第3天','第4天','第5天','第6天'];
+
+// 配色：浅/深两套，固定分类顺序 slot1-4（已通过 CVD 校验）
+const THEME = {
+  light: { c1:'#2a78d6', c2:'#eb6834', c3:'#1baf7a', c4:'#eda100' },
+  dark:  { c1:'#3987e5', c2:'#d95926', c3:'#199e70', c4:'#c98500' }
+};
+
+const SERIES = [
+  { name:'空调成本',   panel:0, slot:'c1', values:[2.125, 0.823, 0.148, 0.11,  0.071,  0.033] },
+  { name:'珠宝成本',   panel:0, slot:'c2', values:[5.46,  5.27,  5.17,  0.0284,0.0261, 0.01 ] },
+  { name:'空调实际成本',panel:1, slot:'c3', values:[3.036, 1.176, 0.211, 0.157, 0.101,  0.047] },
+  { name:'珠宝实际成本',panel:1, slot:'c4', values:[0.780, 0.240, 0.054, 0.044, 0.018,  null ] },
+];
+
+// 对数刻度：共用一个 0.005–10 区间，压缩 2–5 中段、拉开小数值间距，两面板量级可直接对比
+const YMIN = 0.005, YMAX = 10;
+const TICKS = [0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10];
+const PANELS = [ { id:'panel0' }, { id:'panel1' } ];
+
+const W = 732, LEFT = 46, RIGHT = 30;
+const PLOT_W = W - LEFT - RIGHT;      // 656
+const TOP = 8, PLOT_H = 128, BOTTOM = 34; // x 轴标签带
+const SVG_H = TOP + PLOT_H + BOTTOM;  // 170
+
+let theme = 'light';
+const wrap = document.getElementById('wrap');
+const crosshair = document.getElementById('crosshair');
+const tooltip = document.getElementById('tooltip');
+
+const xPos = i => LEFT + PLOT_W * i / (DAYS.length - 1);
+const yPos = v => TOP + PLOT_H * (1 - Math.log(v / YMIN) / Math.log(YMAX / YMIN));
+
+const NS = 'http://www.w3.org/2000/svg';
+function el(name, attrs) {
+  const n = document.createElementNS(NS, name);
+  for (const k in attrs) n.setAttribute(k, attrs[k]);
+  return n;
+}
+
+function fmt(v) {
+  if (v == null) return '无';
+  const s = v.toPrecision(3);
+  return s.replace(/\.?0+$/, '');
+}
+
+function renderPanel(panelIdx) {
+  const svg = document.getElementById(PANELS[panelIdx].id);
+  svg.innerHTML = '';
+
+  // 横向网格 + 底线（对数刻度）
+  for (const t of TICKS) {
+    const y = yPos(t);
+    svg.appendChild(el('line', {
+      x1: LEFT, x2: LEFT + PLOT_W, y1: y, y2: y,
+      stroke: t === TICKS[0] ? 'var(--baseline)' : 'var(--gridline)',
+      'stroke-width': 1
+    }));
+    const lb = el('text', { x: LEFT - 8, y: y + 4, 'text-anchor': 'end',
+      fill: 'var(--muted)', 'font-size': 11 });
+    lb.textContent = String(t);
+    svg.appendChild(lb);
+  }
+
+  // x 轴标签
+  DAYS.forEach((d, i) => {
+    const tx = el('text', { x: xPos(i), y: TOP + PLOT_H + 20, 'text-anchor': 'middle',
+      fill: 'var(--muted)', 'font-size': 11 });
+    tx.textContent = d;
+    svg.appendChild(tx);
+  });
+
+  const color = THEME[theme];
+
+  // 折线 + 断点
+  SERIES.filter(s => s.panel === panelIdx).forEach(s => {
+    const c = color[s.slot];
+    const pts = s.values.map((v, i) => v == null ? null : [xPos(i), yPos(v)]);
+    // 按连续非空分段画线
+    let seg = [];
+    const flush = () => {
+      if (seg.length >= 2) {
+        const pl = el('polyline', { points: seg.map(p => p.join(',')).join(' '),
+          fill: 'none', stroke: c, 'stroke-width': 2, 'stroke-linejoin': 'round',
+          'stroke-linecap': 'round' });
+        svg.appendChild(pl);
+      }
+      seg = [];
+    };
+    pts.forEach(p => { if (p) seg.push(p); else flush(); });
+    flush();
+
+    // 数据点：≥8px、实心 + 2px 底色描边
+    s.values.forEach((v, i) => {
+      if (v == null) return;
+      const cx = xPos(i), cy = yPos(v);
+      svg.appendChild(el('circle', { cx, cy, r: 4, fill: c, stroke: 'var(--ring)', 'stroke-width': 2 }));
+    });
+  });
+
+  // 数值标签：每个数据点都标注；首日标签右移避开纵轴刻度
+  const labels = [];
+  SERIES.filter(s => s.panel === panelIdx).forEach(s => {
+    s.values.forEach((v, i) => {
+      if (v == null) return;
+      const cx = xPos(i), cy = yPos(v);
+      const anchor = i === 0 ? 'start' : 'middle';
+      const lb = el('text', { x: i === 0 ? cx + 7 : cx, y: cy - 8, 'text-anchor': anchor,
+        fill: 'var(--text-secondary)', 'font-size': 10.5 });
+      lb.textContent = fmt(v);
+      svg.appendChild(lb);
+      labels.push({ el: lb, y: cy - 8, day: i });
+    });
+  });
+
+  // 同一天两条标签过近 → 以两者中点为轴上下各推 7px 错开
+  for (let d = 0; d < DAYS.length; d++) {
+    const group = labels.filter(g => g.day === d).sort((a, b) => a.y - b.y);
+    for (let k = 1; k < group.length; k++) {
+      const a = group[k - 1], b = group[k];
+      if (b.y - a.y < 14) {
+        const mid = (a.y + b.y) / 2;
+        a.el.setAttribute('y', mid - 7);
+        b.el.setAttribute('y', mid + 7);
+      }
+    }
+  }
+}
+
+function buildLegend() {
+  const c = THEME[theme];
+  const leg = document.getElementById('legend');
+  leg.innerHTML = '';
+  SERIES.forEach(s => {
+    const item = document.createElement('span');
+    item.className = 'swatch';
+    item.innerHTML = '<span class="dot" style="background:' + c[s.slot] + '"></span>' +
+      '<span class="lbl">' + s.name + '</span>';
+    leg.appendChild(item);
+  });
+  leg.appendChild(document.createTextNode('（数据缺失处线条断开；悬停折线可查看每日数值）'));
+}
+
+function buildTable() {
+  const tb = document.getElementById('tbody');
+  tb.innerHTML = '';
+  DAYS.forEach((d, i) => {
+    const tr = document.createElement('tr');
+    const tdDay = document.createElement('td');
+    tdDay.textContent = d;
+    tr.appendChild(tdDay);
+    SERIES.forEach(s => {
+      const td = document.createElement('td');
+      const v = s.values[i];
+      td.textContent = v == null ? '无' : fmt(v);
+      if (v == null) td.className = 'miss';
+      tr.appendChild(td);
+    });
+    tb.appendChild(tr);
+  });
+}
+
+function render() {
+  renderPanel(0);
+  renderPanel(1);
+  buildLegend();
+  buildTable();
+  const c = THEME[theme];
+  document.querySelectorAll('#legend .dot').forEach((d, i) => {
+    d.style.background = c[SERIES[i].slot];
+  });
+}
+
+// ---- 悬停：十字线 + tooltip ----
+function nearestDay(e) {
+  const rect = wrap.getBoundingClientRect();
+  const scale = W / rect.width;             // 支持宽度缩放
+  const px = (e.clientX - rect.left) * scale;
+  const rw = wrap.getBoundingClientRect().height;
+  const x = Math.round((px - LEFT) / (PLOT_W / (DAYS.length - 1)));
+  return Math.max(0, Math.min(DAYS.length - 1, x));
+}
+
+wrap.addEventListener('mousemove', e => {
+  const i = nearestDay(e);
+  const rect = wrap.getBoundingClientRect();
+  const scale = W / rect.width;
+  const px = (e.clientX - rect.left) * scale;
+
+  crosshair.style.display = 'block';
+  crosshair.style.left = (xPos(i) * scale) + 'px';
+  crosshair.style.top = '14px';
+  crosshair.style.bottom = '8px';
+
+  const c = THEME[theme];
+  let html = '<div class="t-day">' + DAYS[i] + '</div>';
+  SERIES.forEach(s => {
+    const v = s.values[i];
+    html += '<div class="t-row"><span class="k">' + s.name + '</span>' +
+      '<span class="v' + (v == null ? ' miss' : '') + '">' + (v == null ? '无' : fmt(v)) + '</span></div>';
+  });
+  tooltip.innerHTML = html;
+  tooltip.style.display = 'block';
+
+  const ttW = tooltip.offsetWidth, ttH = tooltip.offsetHeight;
+  let left = px * scale / scale; // px already in svg coords
+  // tooltip 相对 wrap 定位（像素坐标）
+  const tipLeft = left + 14;
+  const overflow = tipLeft + ttW - rect.width;
+  tooltip.style.left = (overflow > 0 ? left - ttW - 14 : tipLeft) + 'px';
+  const tipTop = Math.max(10, Math.min(rect.height - ttH - 10, e.clientY - rect.top + 12));
+  tooltip.style.top = tipTop + 'px';
+});
+
+wrap.addEventListener('mouseleave', () => {
+  crosshair.style.display = 'none';
+  tooltip.style.display = 'none';
+});
+
+// ---- 主题 ----
+function applyTheme(t) {
+  theme = t;
+  document.documentElement.setAttribute('data-theme', t);
+  render();
+  document.getElementById('toggle').textContent = t === 'light' ? '切换深色' : '切换浅色';
+}
+document.getElementById('toggle').addEventListener('click', () => {
+  applyTheme(theme === 'light' ? 'dark' : 'light');
+});
+applyTheme(window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+</script>
+</body>
+</html>
